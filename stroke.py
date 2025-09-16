@@ -1,8 +1,7 @@
 import pandas as pd
 import numpy as np
+from sklearn.metrics import confusion_matrix
 from imblearn.combine import SMOTETomek
-from imblearn.under_sampling import RandomUnderSampler
-from imblearn.pipeline import Pipeline as Pipeline2
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.tree import DecisionTreeClassifier
 from sklearn.metrics import accuracy_score,recall_score,f1_score,precision_score
@@ -14,13 +13,16 @@ from sklearn.preprocessing import OneHotEncoder
 from sklearn.compose import ColumnTransformer
 from sklearn.svm import SVC
 from sklearn.preprocessing import LabelEncoder
-import tkinter as tk
 from sklearn.model_selection import StratifiedKFold
 from sklearn.feature_selection import SelectKBest, chi2, f_classif
 import joblib
 
-
-
+# Sử dụng hàm loss chi phí để chọn ngưỡng do mô hình bị lệch quá cao mặc dù các chỉ số khi test cao nhưng phần lớn là dữ liệu ảo
+def cost_loss(y_true, y_proba, threshold, C_FN=10, C_FP=1):
+    y_pred = (y_proba >= threshold).astype(int)
+    tn, fp, fn, tp = confusion_matrix(y_true, y_pred).ravel()
+    loss = C_FN * fn + C_FP * fp
+    return loss
 data = pd.read_csv("stroke_data.csv")
 data = data.drop("id",axis=1)
 data["bmi"] = (data["bmi"].fillna(data["bmi"].median()))
@@ -78,7 +80,6 @@ for name,model in models.items():
         reg = GridSearchCV(estimator=RandomForestClassifier(class_weight="balanced", random_state=1),param_grid=param,cv=4,scoring="recall",verbose=2) # giúp thay đổi parameter của random giúp đa dạng hơn
     for train, test in kfold.split(x,y):
         reg.fit(x.iloc[train, :], y.iloc[train].values.ravel())
-
         predict = reg.predict(x.iloc[test, :])
         recall = recall_score(y.iloc[test], predict, average=None)
         precision = precision_score(y.iloc[test], predict, average=None)
@@ -94,6 +95,12 @@ for name,model in models.items():
     if name == "RandomForest":
         best_model = reg.best_estimator_
 
+        y_proba = best_model.predict_proba(x.iloc[test, :])[:, 1] # lấy xác suất của cây có parameter tốt nhất
+        thresholds = np.linspace(0, 1, 100)
+        losses = [cost_loss(y.iloc[test], y_proba, t, C_FN=10, C_FP=1) for t in thresholds]
+        best_threshold = thresholds[np.argmin(losses)]
+        print("Best threshold:", best_threshold)
+        joblib.dump(best_threshold, "threshold.pkl")
         # save_result_model[name] = {"Stroke" : { "accuracy" : acc_stroke , "recall" : recall_stroke ,"f1" : f1_stroke ,"precision" : precision_stroke}}
     print(f"{name} : ")
     print(f"Accuracy trung bình: {np.mean(scores_accuracy)}")

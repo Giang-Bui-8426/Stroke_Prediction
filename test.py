@@ -10,6 +10,7 @@ encoders = joblib.load("encoders.pkl")
 data = pd.read_csv("stroke_data.csv")
 col = data.drop(["stroke","ever_married"],axis=1).columns
 All_col = joblib.load("all_cols.pkl")
+threshold  = joblib.load("threshold.pkl")
 def predict():
     new_data = pd.DataFrame([{
         "gender": gender_var.get(),
@@ -25,12 +26,17 @@ def predict():
     data_predict = clean_missData(new_data,col)
     data_predict = processor.transform(data_predict)
     data_predict = pd.DataFrame(data_predict, columns=All_col)
-    y_pred = best_model.predict(data_predict)
-
-    # Nếu có dùng LabelEncoder cho y, giải mã lại
-    pred1 = "Yes" if encoders["stroke"].inverse_transform(y_pred)[0] == 1 else "No"
+    proba = best_model.predict_proba(data_predict)[0]
     stroke.delete(0, tk.END)
-    stroke.insert(0,pred1)
+    if proba[1] > threshold:
+        stroke.insert(0,1)
+    else:
+        stroke.insert(0, 0)
+    print("P(No) = %.3f, P(Yes) = %.3f" % (proba[0], proba[1]))
+    # Nếu có dùng LabelEncoder cho y, giải mã lại
+    # pred1 = "Yes" if encoders["stroke"].inverse_transform(y_pred)[0] == 1 else "No"
+    # stroke.delete(0, tk.END)
+    # stroke.insert(0,pred1)
 
 def clean_missData(data,col_data):
     for i in  col_data:
